@@ -33,17 +33,20 @@ func (e *EventEmitter) On(event string, listener interface{}) error {
 	return nil
 }
 
-func (e *EventEmitter) Fire(event string, payload ...interface{}) ([]interface{}, error) {
+func (e *EventEmitter) Fire(event string, payload ...interface{}) ([][]interface{}, error) {
 	fn, in, err := e.resolve(event, payload...)
 	if err != nil {
 		return nil, err
 	}
 
-	results := make([]interface{}, len(fn))
+	results := make([][]interface{}, len(fn))
 
 	for i, f := range fn {
-		value := f.Call(in)
-		results[i] = reflect.ValueOf(value[0].Interface())
+		// results in values is the slice of returned values from our listener
+		values := f.Call(in)
+
+		// here we try to parse this slice to a slice of concrete values
+		results[i], _ = getValues(values)
 	}
 
 	return results, nil
@@ -59,8 +62,13 @@ func (e *EventEmitter) FireBackground(event string, payload ...interface{}) (cha
 
 	for _, f := range fn {
 		go func(f reflect.Value) {
-			value := f.Call(in)
-			results <- reflect.ValueOf(value[0].Interface())
+			values := f.Call(in)
+
+			if output, err := getValues(values); err == nil {
+				results <- output
+			} else {
+				results <- nil
+			}
 		}(f)
 	}
 
@@ -103,16 +111,16 @@ func (e *EventEmitter) resolve(event string, payload ...interface{}) ([]reflect.
 		return make([]reflect.Value, 0), nil, errors.New("No listener defined for event " + event)
 	}
 
-	fn := make([]reflect.Value, len(listeners))
+	fns := make([]reflect.Value, len(listeners))
 	for i, listener := range listeners {
-		f := reflect.ValueOf(listener)
-		if len(payload) != f.Type().NumIn() {
-			// f is not qualified to be a correct listener for the event
+		fn := reflect.ValueOf(listener)
+		if len(payload) != fn.Type().NumIn() {
+			// fn is not qualified to be a correct listener for the event
 			continue
 		}
 
 		// add f into fn
-		fn[i] = f
+		fns[i] = fn
 	}
 
 	in := make([]reflect.Value, len(payload))
@@ -120,14 +128,24 @@ func (e *EventEmitter) resolve(event string, payload ...interface{}) ([]reflect.
 		in[k] = reflect.ValueOf(param)
 	}
 
-	return fn, in, nil
+	return fns, in, nil
 }
 
-func (e *EventEmitter) results(input [][]reflect.Value) (output []interface{}, err error) {
-	output = make([]interface{}, len(input))
+func getValues(input []reflect.Value) (values []interface{}, err error) {
+	values = make([]interface{}, len(input))
 	for i, val := range input {
-		output[i] = reflect.ValueOf(val[0].Interface())
+		values[i] = val.Interface()
 	}
 
-	return output, nil
+	return values, nil
+}
+
+func mapValues(inputs [][]reflect.Value) (values [][]interface{}, err error) {
+	values = make([][]interface{}, len(inputs))
+
+	for i, input := range inputs {
+		values[i], _ = getValues(input)
+	}
+
+	return values, err
 }
