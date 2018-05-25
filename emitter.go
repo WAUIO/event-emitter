@@ -6,8 +6,8 @@ import (
 	"sync"
 )
 
-func New() EventEmitter {
-	return EventEmitter{
+func New() *EventEmitter {
+	return &EventEmitter{
 		listeners: make(map[string][]interface{}),
 	}
 }
