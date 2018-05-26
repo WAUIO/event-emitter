@@ -52,13 +52,13 @@ func (e *EventEmitter) Fire(event string, payload ...interface{}) ([][]interface
 	return results, nil
 }
 
-func (e *EventEmitter) FireBackground(event string, payload ...interface{}) (chan interface{}, error) {
+func (e *EventEmitter) FireBackground(event string, payload ...interface{}) (chan []interface{}, error) {
 	fn, in, err := e.resolve(event, payload...)
 	if err != nil {
 		return nil, err
 	}
 
-	results := make(chan interface{}, len(fn))
+	results := make(chan []interface{}, len(fn))
 
 	for _, f := range fn {
 		go func(f reflect.Value) {
